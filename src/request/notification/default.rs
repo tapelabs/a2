@@ -524,18 +524,44 @@ impl<'a> DefaultNotificationBuilder<'a> {
     pub fn set_live_activity_start_content(
         mut self,
         attributes_type: &'a str,
-        attributes: &dyn Serialize,
+        attributes: Option<&dyn Serialize>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        let values = serde_json::to_value(attributes)?;
         let mut btree = BTreeMap::new();
 
-        btree.insert("content-state", values.clone());
-        btree.insert("attributes", values);
+        if let Some(attributes) = attributes {
+            let values = serde_json::to_value(attributes)?;
+
+            btree.insert("content-state", values.clone());
+            btree.insert("attributes", values);
+        }
 
         self.live_activity_payload = Some(LiveActivityPayload {
             event: LiveActivityEvent::Start,
             attributes_type: Some(attributes_type),
-            state_data: Some(btree),
+            state_data: attributes.map(|_| btree),
+        });
+
+        Ok(self)
+    }
+
+    pub fn set_live_activity_update_content(
+        mut self,
+        attributes_type: &'a str,
+        attributes: Option<&dyn Serialize>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut btree = BTreeMap::new();
+
+        if let Some(attributes) = attributes {
+            let values = serde_json::to_value(attributes)?;
+
+            btree.insert("content-state", values.clone());
+            btree.insert("attributes", values);
+        }
+
+        self.live_activity_payload = Some(LiveActivityPayload {
+            event: LiveActivityEvent::Update,
+            attributes_type: Some(attributes_type),
+            state_data: attributes.map(|_| btree),
         });
 
         Ok(self)
@@ -560,7 +586,7 @@ impl<'a> NotificationBuilder<'a> for DefaultNotificationBuilder<'a> {
                 category: self.category,
                 mutable_content: Some(self.mutable_content),
                 url_args: None,
-                live_activity_payload: None,
+                live_activity_payload: self.live_activity_payload,
             },
             device_token,
             options,
@@ -828,5 +854,121 @@ mod tests {
         });
 
         assert_eq!(expected_payload, to_value(payload).unwrap());
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_start_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content("AdventureAttributes", None)?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_start_custom_data() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+            )?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_update_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_update_content("AdventureAttributes", None)?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "mutable-content": 0,
+                "event": "update",
+                "attributes-type": "AdventureAttributes",
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_update_custom_data() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_update_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+            )?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "mutable-content": 0,
+                "event": "update",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
     }
 }

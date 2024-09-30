@@ -191,6 +191,7 @@ pub struct APS<'a> {
     pub url_args: Option<&'a [&'a str]>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten)]
     pub live_activity_payload: Option<LiveActivityPayload<'a>>,
 }
 
@@ -217,11 +218,14 @@ pub enum APSSound<'a> {
 }
 
 #[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "kebab-case")]
 pub struct LiveActivityPayload<'a> {
-    #[serde(flatten)]
     pub event: LiveActivityEvent,
-    #[serde(flatten)]
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes_type: Option<&'a str>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub state_data: Option<BTreeMap<&'a str, Value>>,
 }
