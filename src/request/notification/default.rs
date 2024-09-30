@@ -1,7 +1,9 @@
 use crate::request::notification::{NotificationBuilder, NotificationOptions};
-use crate::request::payload::{APSAlert, APSSound, Payload, APS};
+use crate::request::payload::{APSAlert, APSSound, LiveActivityEvent, LiveActivityPayload, Payload, APS};
 
 use std::{borrow::Cow, collections::BTreeMap};
+
+use erased_serde::Serialize;
 
 /// Represents a bool that serializes as a u8 0/1 for false/true respectively
 mod bool_as_u8 {
@@ -117,6 +119,7 @@ pub struct DefaultNotificationBuilder<'a> {
     mutable_content: u8,
     content_available: Option<u8>,
     has_edited_alert: bool,
+    live_activity_payload: Option<LiveActivityPayload<'a>>,
 }
 
 impl<'a> DefaultNotificationBuilder<'a> {
@@ -160,6 +163,7 @@ impl<'a> DefaultNotificationBuilder<'a> {
             mutable_content: 0,
             content_available: None,
             has_edited_alert: false,
+            live_activity_payload: None,
         }
     }
 
@@ -516,6 +520,26 @@ impl<'a> DefaultNotificationBuilder<'a> {
         self.content_available = Some(1);
         self
     }
+
+    pub fn set_live_activity_start_content(
+        mut self,
+        attributes_type: &'a str,
+        attributes: &dyn Serialize,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let values = serde_json::to_value(attributes)?;
+        let mut btree = BTreeMap::new();
+
+        btree.insert("content-state", values.clone());
+        btree.insert("attributes", values);
+
+        self.live_activity_payload = Some(LiveActivityPayload {
+            event: LiveActivityEvent::Start,
+            attributes_type: Some(attributes_type),
+            state_data: Some(btree),
+        });
+
+        Ok(self)
+    }
 }
 
 impl<'a> NotificationBuilder<'a> for DefaultNotificationBuilder<'a> {
@@ -536,6 +560,7 @@ impl<'a> NotificationBuilder<'a> for DefaultNotificationBuilder<'a> {
                 category: self.category,
                 mutable_content: Some(self.mutable_content),
                 url_args: None,
+                live_activity_payload: None,
             },
             device_token,
             options,

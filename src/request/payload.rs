@@ -189,6 +189,9 @@ pub struct APS<'a> {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url_args: Option<&'a [&'a str]>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub live_activity_payload: Option<LiveActivityPayload<'a>>,
 }
 
 /// Different notification content types.
@@ -211,4 +214,21 @@ pub enum APSSound<'a> {
     Critical(DefaultSound<'a>),
     /// Name for a notification sound
     Sound(&'a str),
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct LiveActivityPayload<'a> {
+    #[serde(flatten)]
+    pub event: LiveActivityEvent,
+    #[serde(flatten)]
+    pub attributes_type: Option<&'a str>,
+    #[serde(flatten)]
+    pub state_data: Option<BTreeMap<&'a str, Value>>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum LiveActivityEvent {
+    Start,
+    Update,
 }
