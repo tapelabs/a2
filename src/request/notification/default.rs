@@ -942,6 +942,58 @@ mod tests {
     }
 
     #[test]
+    fn test_default_notification_with_live_activity_start_custom_data_with_alert(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+                now,
+            )?
+            .set_body("bonjour")
+            .set_title("baguette")
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "alert": {
+                    "body": "bonjour",
+                    "title": "baguette",
+                }
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
     fn test_default_notification_with_live_activity_update_empty_data() -> Result<(), Box<dyn std::error::Error>> {
         let now = SystemTime::UNIX_EPOCH
             .checked_add(Duration::from_secs(10))
