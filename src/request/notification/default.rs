@@ -525,6 +525,7 @@ impl<'a> DefaultNotificationBuilder<'a> {
         mut self,
         attributes_type: &'a str,
         attributes: Option<&dyn Serialize>,
+        timestamp: std::time::SystemTime,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut btree = BTreeMap::new();
 
@@ -539,6 +540,12 @@ impl<'a> DefaultNotificationBuilder<'a> {
             event: LiveActivityEvent::Start,
             attributes_type: Some(attributes_type),
             state_data: attributes.map(|_| btree),
+            timestamp_epoch_seconds: Some(
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            ),
         });
 
         Ok(self)
@@ -548,6 +555,7 @@ impl<'a> DefaultNotificationBuilder<'a> {
         mut self,
         attributes_type: &'a str,
         attributes: Option<&dyn Serialize>,
+        timestamp: std::time::SystemTime,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut btree = BTreeMap::new();
 
@@ -562,6 +570,12 @@ impl<'a> DefaultNotificationBuilder<'a> {
             event: LiveActivityEvent::Update,
             attributes_type: Some(attributes_type),
             state_data: attributes.map(|_| btree),
+            timestamp_epoch_seconds: Some(
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            ),
         });
 
         Ok(self)
@@ -603,6 +617,8 @@ impl<'a> Default for DefaultNotificationBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, SystemTime};
+
     use super::*;
     use serde_json::value::to_value;
 
@@ -858,12 +874,17 @@ mod tests {
 
     #[test]
     fn test_default_notification_with_live_activity_start_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
         let payload = DefaultNotificationBuilder::new()
-            .set_live_activity_start_content("AdventureAttributes", None)?
+            .set_live_activity_start_content("AdventureAttributes", None, now)?
             .build("device-token", Default::default());
 
         let expected_payload = json!({
             "aps": {
+                "timestamp": 10,
                 "mutable-content": 0,
                 "event": "start",
                 "attributes-type": "AdventureAttributes",
@@ -883,6 +904,10 @@ mod tests {
             eventDescription: String,
         }
 
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
         let payload = DefaultNotificationBuilder::new()
             .set_live_activity_start_content(
                 "AdventureAttributes",
@@ -890,11 +915,13 @@ mod tests {
                     currentHealthLevel: 100,
                     eventDescription: "Adventure has begun!".to_owned(),
                 }),
+                now,
             )?
             .build("device-token", Default::default());
 
         let expected_payload = json!({
             "aps": {
+                "timestamp": 10,
                 "mutable-content": 0,
                 "event": "start",
                 "attributes-type": "AdventureAttributes",
@@ -916,12 +943,17 @@ mod tests {
 
     #[test]
     fn test_default_notification_with_live_activity_update_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
         let payload = DefaultNotificationBuilder::new()
-            .set_live_activity_update_content("AdventureAttributes", None)?
+            .set_live_activity_update_content("AdventureAttributes", None, now)?
             .build("device-token", Default::default());
 
         let expected_payload = json!({
             "aps": {
+                "timestamp": 10,
                 "mutable-content": 0,
                 "event": "update",
                 "attributes-type": "AdventureAttributes",
@@ -941,6 +973,10 @@ mod tests {
             eventDescription: String,
         }
 
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
         let payload = DefaultNotificationBuilder::new()
             .set_live_activity_update_content(
                 "AdventureAttributes",
@@ -948,11 +984,13 @@ mod tests {
                     currentHealthLevel: 100,
                     eventDescription: "Adventure has begun!".to_owned(),
                 }),
+                now,
             )?
             .build("device-token", Default::default());
 
         let expected_payload = json!({
             "aps": {
+                "timestamp": 10,
                 "mutable-content": 0,
                 "event": "update",
                 "attributes-type": "AdventureAttributes",

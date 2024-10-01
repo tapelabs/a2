@@ -228,6 +228,10 @@ pub struct LiveActivityPayload<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub state_data: Option<BTreeMap<&'a str, Value>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "timestamp")]
+    pub timestamp_epoch_seconds: Option<u64>,
 }
 
 #[derive(Serialize, Debug, Clone)]
