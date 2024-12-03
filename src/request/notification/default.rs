@@ -525,6 +525,8 @@ impl<'a> DefaultNotificationBuilder<'a> {
         mut self,
         attributes_type: &'a str,
         attributes: Option<&dyn Serialize>,
+        input_push_channel: Option<String>,
+        input_push_token: bool,
         timestamp: std::time::SystemTime,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut btree = BTreeMap::new();
@@ -534,6 +536,14 @@ impl<'a> DefaultNotificationBuilder<'a> {
 
             btree.insert("content-state", values.clone());
             btree.insert("attributes", values);
+            // define a channel for updates
+            if let Some(input_push_channel) = input_push_channel {
+                btree.insert("input-push-channel", input_push_channel.into());
+            }
+            // request a new push token for updates
+            if input_push_token {
+                btree.insert("input-push-token", "1".into());
+            }
         }
 
         self.live_activity_payload = Some(LiveActivityPayload {
@@ -555,6 +565,7 @@ impl<'a> DefaultNotificationBuilder<'a> {
         mut self,
         attributes_type: &'a str,
         attributes: Option<&dyn Serialize>,
+        input_push_channel: Option<String>,
         timestamp: std::time::SystemTime,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut btree = BTreeMap::new();
@@ -563,7 +574,11 @@ impl<'a> DefaultNotificationBuilder<'a> {
             let values = serde_json::to_value(attributes)?;
 
             btree.insert("content-state", values.clone());
-            btree.insert("attributes", values);
+            // btree.insert("attributes", values); // not required for updates
+            // specify the channel for updates
+            if let Some(input_push_channel) = input_push_channel {
+                btree.insert("input-push-channel", input_push_channel.into());
+            }
         }
 
         self.live_activity_payload = Some(LiveActivityPayload {
