@@ -87,6 +87,7 @@ impl<'a> NotificationBuilder<'a> for WebNotificationBuilder<'a> {
                 category: None,
                 mutable_content: None,
                 url_args: Some(self.url_args),
+                live_activity_payload: None,
             },
             device_token,
             options,

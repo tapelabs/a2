@@ -1,7 +1,9 @@
 use crate::request::notification::{NotificationBuilder, NotificationOptions};
-use crate::request::payload::{APSAlert, APSSound, Payload, APS};
+use crate::request::payload::{APSAlert, APSSound, LiveActivityEvent, LiveActivityPayload, Payload, APS};
 
 use std::{borrow::Cow, collections::BTreeMap};
+
+use erased_serde::Serialize;
 
 /// Represents a bool that serializes as a u8 0/1 for false/true respectively
 mod bool_as_u8 {
@@ -117,6 +119,7 @@ pub struct DefaultNotificationBuilder<'a> {
     mutable_content: u8,
     content_available: Option<u8>,
     has_edited_alert: bool,
+    live_activity_payload: Option<LiveActivityPayload<'a>>,
 }
 
 impl<'a> DefaultNotificationBuilder<'a> {
@@ -160,6 +163,7 @@ impl<'a> DefaultNotificationBuilder<'a> {
             mutable_content: 0,
             content_available: None,
             has_edited_alert: false,
+            live_activity_payload: None,
         }
     }
 
@@ -516,6 +520,66 @@ impl<'a> DefaultNotificationBuilder<'a> {
         self.content_available = Some(1);
         self
     }
+
+    pub fn set_live_activity_start_content(
+        mut self,
+        attributes_type: &'a str,
+        attributes: Option<&dyn Serialize>,
+        timestamp: std::time::SystemTime,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut btree = BTreeMap::new();
+
+        if let Some(attributes) = attributes {
+            let values = serde_json::to_value(attributes)?;
+
+            btree.insert("content-state", values.clone());
+            btree.insert("attributes", values);
+        }
+
+        self.live_activity_payload = Some(LiveActivityPayload {
+            event: LiveActivityEvent::Start,
+            attributes_type: Some(attributes_type),
+            state_data: attributes.map(|_| btree),
+            timestamp_epoch_seconds: Some(
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            ),
+        });
+
+        Ok(self)
+    }
+
+    pub fn set_live_activity_update_content(
+        mut self,
+        attributes_type: &'a str,
+        attributes: Option<&dyn Serialize>,
+        timestamp: std::time::SystemTime,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut btree = BTreeMap::new();
+
+        if let Some(attributes) = attributes {
+            let values = serde_json::to_value(attributes)?;
+
+            btree.insert("content-state", values.clone());
+            btree.insert("attributes", values);
+        }
+
+        self.live_activity_payload = Some(LiveActivityPayload {
+            event: LiveActivityEvent::Update,
+            attributes_type: Some(attributes_type),
+            state_data: attributes.map(|_| btree),
+            timestamp_epoch_seconds: Some(
+                timestamp
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+            ),
+        });
+
+        Ok(self)
+    }
 }
 
 impl<'a> NotificationBuilder<'a> for DefaultNotificationBuilder<'a> {
@@ -536,6 +600,7 @@ impl<'a> NotificationBuilder<'a> for DefaultNotificationBuilder<'a> {
                 category: self.category,
                 mutable_content: Some(self.mutable_content),
                 url_args: None,
+                live_activity_payload: self.live_activity_payload,
             },
             device_token,
             options,
@@ -552,6 +617,8 @@ impl<'a> Default for DefaultNotificationBuilder<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, SystemTime};
+
     use super::*;
     use serde_json::value::to_value;
 
@@ -803,5 +870,195 @@ mod tests {
         });
 
         assert_eq!(expected_payload, to_value(payload).unwrap());
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_start_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content("AdventureAttributes", None, now)?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_start_custom_data() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+                now,
+            )?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_start_custom_data_with_alert(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_start_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+                now,
+            )?
+            .set_body("bonjour")
+            .set_title("baguette")
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "start",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "alert": {
+                    "body": "bonjour",
+                    "title": "baguette",
+                }
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_update_empty_data() -> Result<(), Box<dyn std::error::Error>> {
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_update_content("AdventureAttributes", None, now)?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "update",
+                "attributes-type": "AdventureAttributes",
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_default_notification_with_live_activity_update_custom_data() -> Result<(), Box<dyn std::error::Error>> {
+        #[derive(Serialize)]
+        struct AttributesTestType {
+            currentHealthLevel: u64,
+            eventDescription: String,
+        }
+
+        let now = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_secs(10))
+            .expect("invalid timestamp");
+
+        let payload = DefaultNotificationBuilder::new()
+            .set_live_activity_update_content(
+                "AdventureAttributes",
+                Some(&AttributesTestType {
+                    currentHealthLevel: 100,
+                    eventDescription: "Adventure has begun!".to_owned(),
+                }),
+                now,
+            )?
+            .build("device-token", Default::default());
+
+        let expected_payload = json!({
+            "aps": {
+                "timestamp": 10,
+                "mutable-content": 0,
+                "event": "update",
+                "attributes-type": "AdventureAttributes",
+                "content-state": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+                "attributes": {
+                    "currentHealthLevel": 100,
+                    "eventDescription": "Adventure has begun!"
+                },
+            },
+        });
+
+        assert_eq!(expected_payload, to_value(payload).unwrap());
+
+        Ok(())
     }
 }
